@@ -224,7 +224,7 @@ def code_double_layer(svg_top, svg_bottom, scad):
     holes = circles_top
     for n in circles_bottom:
         holes.append(n)
-    [hole_code, polygons_top_code, lines_top_code] = [circles_to_scad(holes), polygons_to_scad(polygons_top), lines_to_scad(lines_top)]
+    [holes_code, polygons_top_code, lines_top_code] = [circles_to_scad(holes), polygons_to_scad(polygons_top), lines_to_scad(lines_top)]
     [polygons_bottom_code, lines_bottom_code] = [polygons_to_scad(polygons_bottom), lines_to_scad(lines_bottom)]
 
     scad.write("module PCB() {\n")
