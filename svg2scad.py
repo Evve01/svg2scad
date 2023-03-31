@@ -4,19 +4,39 @@ import numpy as np
 rot_matrix = np.array([[0, -1],[1, 0]])
 
 resolution = 1e-6
-trace_width = 1
 
-source_file = sys.argv[1]
-output_file = sys.argv[2]
+print("svg2scad v0.2.0")
+
+layers = int(input("Please input number of layers (maximum 2): "))
+
+if layers == 1:
+    source_file = input("Please input source file address: ")
+else:
+    top_file = input("Please input top file address: ")
+    bottom_file = input("Please input bottom file address: ")
+
+output_file = input("Please input output file address: ")
+
+trace_width = 1
+hole_radius = 0.5
+
+dimensions = input("Please input dimensions x,y in mm: ").strip().split(',')
+[width, height] = [float(dimensions[0]), float(dimensions[1])]
+
 scad_file = open(output_file, 'w')
-svg_file = open(source_file).read()
+
+if layers == 1:
+    svg_file = open(source_file).read()
+else:
+    svg_top_file = open(top_file).read()
+    svg_bottom_file = open(bottom_file).read()
 
 
 
 def circles_analyze(x, y, r):
     x *= resolution
     y *= resolution
-    r = 0.45
+    r = hole_radius
     return(((x, y), r))
 
 
@@ -156,34 +176,115 @@ def lines_to_scad(list_of_lines):
 
 
 
-def code(svg, scad):
+def code_single_layer(svg, scad):
     [circles, polygons, lines] = decode_file(svg)
-    [circle_code, polygons_code, lines_code] = [circles_to_scad(circles), polygons_to_scad(polygons), lines_to_scad(lines)]
+    [holes_code, polygons_code, lines_code] = [circles_to_scad(circles), polygons_to_scad(polygons), lines_to_scad(lines)]
 
     scad.write("module PCB() {\n")
+    scad.write("\tdifference() {\n")
+    scad.write("\t\tcube([" + str(width) + ", "+ str(height) + ", 2]);\n")
+    scad.write("\t\tunion() {\n")
 
-    scad.write("\t//code to generate circles:\n")
-    scad.write("\ttranslate([0, 0, -0.5]) {\n")
-    scad.write("\tlinear_extrude(3) {\n")
-    for n in circle_code:
-        scad.write("\t\t\t" + n)
-    scad.write("\t\t}\n")
-    scad.write("\t}\n")
-
-    scad.write("\n\t//code to generate various polygons:\n")
-    for n in polygons_code:
-        scad.write("\t" + n)
-
-    scad.write("\n\t//code to generate traces:\n")
-    scad.write("\ttranslate([0, 0, 1.2]) {\n")
-    scad.write("\t\tlinear_extrude(1) {\n")
-    scad.write("\t\t\tunion() {\n")
-    for n in lines_code:
-        scad.write("\t\t\t\t" + n)
+    scad.write("\t\t\t//code to generate circles:\n")
+    scad.write("\t\t\ttranslate([0, 0, -0.5]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(3) {\n")
+    for n in holes_code:
+        scad.write("\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t}\n")
     scad.write("\t\t\t}\n")
+
+
+    scad.write("\n\t\t\t//code to generate various polygons:\n")
+    scad.write("\t\t\ttranslate([0, 0, 1.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    for n in polygons_code:
+        scad.write("\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}")
+
+    scad.write("\n\t\t\t//code to generate traces:\n")
+    scad.write("\t\t\ttranslate([0, 0, 1.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    scad.write("\t\t\t\t\tunion() {\n")
+    for n in lines_code:
+        scad.write("\t\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t\t}\n")
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}\n")
+
     scad.write("\t\t}\n")
     scad.write("\t}\n")
-
     scad.write("};")
 
-code(svg_file, scad_file)
+
+
+def code_double_layer(svg_top, svg_bottom, scad):
+    [circles_top, polygons_top, lines_top] = decode_file(svg_top)
+    [circles_bottom, polygons_bottom, lines_bottom] = decode_file(svg_bottom)
+    holes = circles_top
+    for n in circles_bottom:
+        holes.append(n)
+    [hole_code, polygons_top_code, lines_top_code] = [circles_to_scad(holes), polygons_to_scad(polygons_top), lines_to_scad(lines_top)]
+    [polygons_bottom_code, lines_bottom_code] = [polygons_to_scad(polygons_bottom), lines_to_scad(lines_bottom)]
+
+    scad.write("module PCB() {\n")
+    scad.write("\tdifference() {\n")
+    scad.write("\t\tcube([" + str(width) + ", "+ str(height) + ", 2]);\n")
+    scad.write("\t\tunion() {\n")
+
+    scad.write("\t\t\t//code to generate holes:\n")
+    scad.write("\t\t\ttranslate([0, 0, -0.5]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(3) {\n")
+    for n in holes_code:
+        scad.write("\t\t\t\t" + n)
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}\n")
+
+    scad.write("\t\t\t//TOP LAYER\n")
+
+    scad.write("\n\t\t\t//code to generate various polygons:\n")
+    scad.write("\t\t\ttranslate([0, 0, 1.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    for n in polygons_top_code:
+        scad.write("\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}")
+
+    scad.write("\n\t\t\t//code to generate traces:\n")
+    scad.write("\t\t\ttranslate([0, 0, 1.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    scad.write("\t\t\t\t\tunion() {\n")
+    for n in lines_top_code:
+        scad.write("\t\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t\t}\n")
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}\n")
+
+    scad.write("\t\t\t//BOTTOM LAYER\n")
+
+    scad.write("\n\t\t\t//code to generate various polygons:\n")
+    scad.write("\t\t\ttranslate([0, 0, -.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    for n in polygons_bottom_code:
+        scad.write("\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}")
+
+    scad.write("\n\t\t\t//code to generate traces:\n")
+    scad.write("\t\t\ttranslate([0, 0, -.2]) {\n")
+    scad.write("\t\t\t\tlinear_extrude(1) {\n")
+    scad.write("\t\t\t\t\tunion() {\n")
+    for n in lines_bottom_code:
+        scad.write("\t\t\t\t\t\t" + n)
+    scad.write("\t\t\t\t\t}\n")
+    scad.write("\t\t\t\t}\n")
+    scad.write("\t\t\t}\n")
+
+    scad.write("\t\t}\n")
+    scad.write("\t}\n")
+    scad.write("};")
+
+if layers == 1:
+    code_single_layer(svg_file, scad_file)
+else:
+    code_double_layer(svg_top_file, svg_bottom_file, scad_file)
